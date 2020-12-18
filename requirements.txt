@@ -1,0 +1,8 @@
+jupyter==1.0.0
+numpy==1.18.1
+pandas==0.24.2
+pickleshare==0.7.5
+scikit-learn==0.21.3
+scipy==1.5.4
+torch==1.7.1
+tqdm==4.54.1

@@ -7,7 +7,7 @@ Currently only tested with Python3.7:
     pip install -r requirements.txt
 
 The package assumes the MRF to be in exponential form, that is the distribution over the random variables 
-<img src="latex.codecogs.com/svg.latex?x"> can be written as: 
+<img src="https://latex.codecogs.com/svg.latex?x"> can be written as: 
 <img src="https://latex.codecogs.com/svg.latex? \begin{equation*} p_\theta(x) = \frac{1}{Z_\theta}\exp(\theta^T \phi(x)) \end{equation*},">
 
 where <img src="https://latex.codecogs.com/svg.latex?Z_\theta"> is the partition function (a normalization constant), 

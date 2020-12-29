@@ -11,8 +11,8 @@ The package assumes the MRF to be in exponential form, that is the distribution 
 
 <img src="https://render.githubusercontent.com/render/math?math=p_\theta(x) = \frac{1}{Z_\theta}\exp(\theta^T \phi(x)),">
 
-where <img src="https://latex.codecogs.com/gif.latex?O_t=Z_\theta"> is the partition function (a normalization constant), 
-<img src="https://latex.codecogs.com/gif.latex?O_t=\theta"> are the model's parameter, and  <img src="https://render.githubusercontent.com/render/math?math= \phi(x)"> are the sufficient statistics/factors/potentials.
+where <img src="https://latex.codecogs.com/png.latex?Z_\theta"> is the partition function (a normalization constant), 
+<img src="https://latex.codecogs.com/png.latex?\theta"> are the model's parameter, and  <img src="https://latex.codecogs.com/svg.latex?\phi(x)"> are the sufficient statistics/factors/potentials.
  
 
 If you want to see/run the example: click [here](examples/bb/supervised_vs_latent_no_numba.ipynb). And, if you want to

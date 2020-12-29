@@ -1,10 +1,8 @@
 import numpy as np
+from numba import njit
 
 
-# from numba import jit, jitclass, int32, float32, byte, boolean
-
-
-# @jit(nopython=True)
+@njit
 def sigmoid(x: np.ndarray):
     return 1 / (1 + np.exp(-x))
 
@@ -35,7 +33,7 @@ class FactorGraph:
         :param polarities: a list of integers, where the i-th entry corresponds to the possible value (besides +1)
                             that variable i can take.
         """
-        # assert all([pol in [-1, 0, 1] for pol in polarities]), "Each polarity must be either positive (+1) or negative (-1), or abstain (0)"
+        assert all([len(pol) <= 2 for pol in polarities]), "Only binary variables supported"
         assert len(polarities) == n_vars
         self.n_variables = n_vars
         self.sufficient_statistics = SufficientStats([func for func, _ in potentials])
@@ -54,10 +52,10 @@ class FactorGraph:
         :return:The conditional P(Var_ID = 1 | Vars_-ID) of the given variable given all the others.
         """
         vals_copy = values.copy()
-        vals_copy[target_varID] = 1
+        vals_copy[target_varID] = self.polarities[target_varID][0]  # e.g. +1
         pos = self.sufficient_statistics(vals_copy)
 
-        vals_copy[target_varID] = self.polarities[target_varID]  # e.g. -1
+        vals_copy[target_varID] = self.polarities[target_varID][1]  # e.g. -1
         neg = self.sufficient_statistics(vals_copy)
         return sigmoid(
             self.parameter @ (pos - neg)
@@ -71,7 +69,8 @@ class FactorGraph:
         :param target_varID: ID \in {0, .., #Vars-1} of the variable to be inferred
         :return: 1 if P(target_var = 1| Vars_{-target_var}) > 0.5, and the opposite polarity otherwise
         """
-        return +1 if self.conditional(target_varID, values) > 0.5 else self.polarities[target_varID]
+        return self.polarities[target_varID][0] if self.conditional(target_varID, values) > 0.5 \
+            else self.polarities[target_varID][1]
 
     def predict_proba(self, data, target_varID=0):
         r"""
@@ -83,7 +82,7 @@ class FactorGraph:
         """
         Y_soft = [
             self.conditional(target_varID, observed_vals)
-            for observed_vals in data
+            for observed_vals in data.astype(np.int32)
         ]
         return np.array(Y_soft)
 
@@ -104,7 +103,7 @@ class FactorGraph:
         assert set(np.unique(observations)) == {-1, 0, 1}, "Unsupported labels!"
         assert observations.shape[1] == self.n_variables, f"Observations should have {self.n_variables} columns!"
         n_samples = observations.shape[0]
-        observations = np.array(observations)
+        observations = np.array(observations, dtype=np.int32)
         self.chain_sampler_tmp = observations[0, :]  # init to some arbitrary value
 
         for epoch in range(n_epochs):

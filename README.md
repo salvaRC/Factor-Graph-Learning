@@ -15,5 +15,5 @@ where <img src="https://latex.codecogs.com/svg.latex?Z_\theta"> is the partition
 <img src="https://latex.codecogs.com/svg.latex?\theta"> are the model's parameter, and  <img src="https://latex.codecogs.com/svg.latex?\phi(x)"> are the sufficient statistics/factors/potentials.
  
 
-If you want to see/run the example: click [here](examples/bb/supervised_vs_latent_no_numba.ipynb). And, if you want to
+If you want to see/run the example: click [here](examples/bb/supervised_vs_latent.ipynb). And, if you want to
 compare to Snorkel you need to install it as follows: ``pip install snorkel``

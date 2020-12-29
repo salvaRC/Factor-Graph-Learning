@@ -76,6 +76,12 @@ def eval_final_predictions(Y, preds, probs=None, abstention=-1, only_on_labeled=
     recall = recall_score(Yc, predsC)
     precision = precision_score(Yc, predsC)
     f1 = f1_score(Yc, predsC)
+    if abstention == 0:
+        if verbose:
+            print("Changing -1 <-> 0 for computing probability scores")
+        absts = Yc == 0
+        Yc[Yc == -1] = 0
+        Yc[absts] = -1
     auc = roc_auc_score(Yc, probsC)
     logloss = log_loss(Yc, probsC)
     brier = np.square(Yc - probsC).mean()
@@ -115,8 +121,7 @@ def samples_label_counts(label_matrix, upto=None, verbose=True):
 
 
 def pred_and_eval_gen_model(model, label_matrix, y_true, verbose=True, print_MV=True, eps=1e-3, abst=0,
-                            class_balance=None,
-                            MV_policy='random', counts_upto=5, version=7, return_preds=False, coverage_stats=True,
+                            class_balance=None, counts_upto=5, version=7, return_preds=False, coverage_stats=True,
                             neg_label=None, pos_label=1, add_prefix="", parent_stats=None):
     mv_policy = 'random' if eps == 0.0 else 'abstain'
     only_on_labeled = eps != 0.0
@@ -133,7 +138,6 @@ def pred_and_eval_gen_model(model, label_matrix, y_true, verbose=True, print_MV=
         neg_label = 0 if abst == -1 else -1
     preds_discrete = probs_to_preds(prob_preds, eps=eps, class_balance=class_balance, neg_label=neg_label,
                                     abstention=abst, pos_label=pos_label)
-
 
     stats1 = eval_final_predictions(y_true, preds_discrete, probs=prob_preds, abstention=abst, verbose=verbose,
                                     neg_label=neg_label, only_on_labeled=only_on_labeled, add_prefix=add_prefix, parent_stats=parent_stats)

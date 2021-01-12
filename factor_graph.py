@@ -25,13 +25,15 @@ class FactorGraph:
     Binary Random Variables have IDs \in {0, 1, 2, .., #Vars - 1} and possible values in { +1, polarities[i] }
     """
 
-    def __init__(self, n_vars, potentials, polarities):
+    def __init__(self, n_vars, potentials, polarities, priors=None, seed=77):
         """
         :param n_vars: #Random Variables
         :param potentials: list of tuples of (callable function, Image cardinality)
                                 Image cardinality just means the number of values the function returns (>= 1)
-        :param polarities: a list of integers, where the i-th entry corresponds to the possible value (besides +1)
+        :param polarities: a list of n_vars tuples, where the i-th entry corresponds to the possible values
                             that variable i can take.
+        :param priors: a list of n_vars tuples, where the i-th entry corresponds to the prior probability for variable i
+                            taking the values in the order given in polarities.
         """
         assert all([len(pol) <= 2 for pol in polarities]), "Only binary variables supported"
         assert len(polarities) == n_vars
@@ -39,8 +41,11 @@ class FactorGraph:
         self.sufficient_statistics = SufficientStats([func for func, _ in potentials])
         self.n_params = sum([img_card for _, img_card in potentials])
         self.parameter = np.zeros(self.n_params, dtype=np.float32)
+        self.parameter[:n_vars] = 0.7
         self.polarities = polarities
-        self.chain_sampler_tmp = None
+        self.priors = [[0.5, 0.5] for _ in range(n_vars)] if priors is None else priors
+        self.sampler = None
+        self.rng = np.random.default_rng(seed=seed)
         # self.parameter[:] = 0.7
 
     def conditional(self, target_varID, values):
@@ -86,8 +91,9 @@ class FactorGraph:
         ]
         return np.array(Y_soft)
 
-    def fit(self, observations, lr=0.01, burn_ins=10, n_epochs=25, gibbs_samples=20, batch_size=32, n_gibbs_samples=50,
-            verbose=True):
+    def fit(self, observations, lr=0.01, decay=1.0, burn_ins=10, n_epochs=25, gibbs_steps_per_sample=20, batch_size=32,
+            n_gibbs_samples=50, evaluate_func=None,
+            verbose=True, persistive_sampling=True, eval_args=(), eval_kwargs=dict()):
         """
          This method will fit the Factor Graph/MRF parameter to the given data/observation using:
           Stochastic maximum likelihood for fitting an Markov Random Field (MRF) algorithm from
@@ -104,32 +110,48 @@ class FactorGraph:
         assert observations.shape[1] == self.n_variables, f"Observations should have {self.n_variables} columns!"
         n_samples = observations.shape[0]
         observations = np.array(observations, dtype=np.int32)
-        self.chain_sampler_tmp = observations[0, :]  # init to some arbitrary value
-
+        self.sampler = GibbsSampler(self.polarities, self.priors, rng=self.rng)
+        history = {"accuracy": [], "f1": [], "auc": [], "epochs": range(1, n_epochs + 1)}
         for epoch in range(n_epochs):
-            if verbose and epoch % 25 == 0:
-                print(f"Epoch {epoch}...")
-            permutation = np.random.permutation(n_samples)  # shuffle the training set/observations
+            if persistive_sampling:
+                self.sampler.burn_in(self.predict, burn_ins=burn_ins)
+
+            permutation = self.rng.permutation(n_samples)  # shuffle the training set/observations
             for i in range(0, n_samples, batch_size):
+                if not persistive_sampling:
+                    self.sampler = GibbsSampler(self.polarities, self.priors, rng=self.rng)
+                    # print("---"*20, "\n", self.sampler.varID_to_sample)
+                    self.sampler.burn_in(self.predict, burn_ins=burn_ins)
                 indices = permutation[i:i + batch_size]
                 batch = observations[indices, :]
                 """ Get estimate of the expectation of the sufficient statistics by repeated MCMC sampling"""
-                approx_EsuffStats, gradient = np.zeros(self.n_params), np.zeros(self.n_params)
+                approx_Expectation, observed = np.zeros(self.n_params), np.zeros(self.n_params)
                 for _ in range(n_gibbs_samples):
-                    approx_EsuffStats += self.sufficient_statistics(
-                        self.gibbs_sample(n_steps=gibbs_samples)  # single sample of the random variables
-                    )
-                approx_EsuffStats /= n_gibbs_samples
-                """ Compute the gradient over the mini-batch """
+                    approx_Expectation += self.sufficient_statistics(
+                        self.sampler.sample(self.predict)
+                    )  # single sample of the random variables
+                approx_Expectation /= n_gibbs_samples
+                """ Observed value for the sufficient statistics """
                 for observation in batch:
-                    gradient += self.sufficient_statistics(observation) - approx_EsuffStats
-                gradient /= len(batch)
-                """ Stochastic gradient ascent -- minimization is for Losers xD """
-                self.parameter += lr * gradient
+                    observed += self.sufficient_statistics(observation)
+                observed /= len(batch)
+                """ Compute the gradient over the mini-batch """
+                gradient = observed - approx_Expectation
+                """ Stochastic gradient descent step"""
+                self.parameter -= lr * gradient
+            lr *= decay  # decay stepsize
+            if evaluate_func is not None:
+                stats = evaluate_func(*eval_args, **eval_kwargs)
+                [history[metric].append(stats[metric]) for metric in ["accuracy", "f1", "auc"]]
+                print(f"Epoch {epoch}: Acc: {stats['accuracy']} | F1: {stats['f1']} | AUC: {stats['auc']}")
+            elif verbose and epoch % (n_epochs / 5) == 0:
+                print(f"Epoch {epoch}...")
 
-    def gibbs_sample(self, n_steps=10):
+        return history
+
+    '''def gibbs_sample(self, n_steps=10):
         if n_steps < 1:
-            return self.chain_sampler_tmp.copy()
+            return self.sampler.copy()
         k = 0
         while True:
             for varID in range(self.n_variables):  # chain
@@ -137,7 +159,33 @@ class FactorGraph:
                 Set x_i = argmax_{x_i \in values(X_i)} P_\theta (x_i | x_{-i})
                 I.e. set the new x_i to the most probable state, given all the other variables.
                  """
-                self.chain_sampler_tmp[varID] = self.predict(varID, self.chain_sampler_tmp)
+                self.sampler[varID] = self.predict(varID, self.sampler)
                 k += 1
                 if k == n_steps:
-                    return self.chain_sampler_tmp.copy()
+                    return self.sampler.copy()'''
+
+
+class GibbsSampler:
+    def __init__(self, polarities, priors, seed=77, rng=None):
+        self.rng = np.random.default_rng(seed=seed) if rng is None else rng
+        self.n_variables = len(polarities)
+        self.polarities = polarities
+        self.priors = priors
+        self.samples = np.array([
+            self.rng.choice(pol, p=prior) for pol, prior in zip(self.polarities, self.priors)
+        ], dtype=np.int32)  # observations[self.rng.choice(self.n_variables), :]  # OR: init to some arbitrary value
+        self.varID_to_sample = self.rng.choice(self.n_variables)
+
+    def burn_in(self, conditional_func, burn_ins=20):
+        for _ in range(burn_ins):
+            self.sample(conditional_func)
+
+    def sample(self, conditional_func):
+        r"""
+            Set x_i = argmax_{x_i \in values(X_i)} P_\theta (x_i | x_{-i})
+            I.e. set the new x_i to the most probable state, given all the other variables.
+        """
+        self.samples[self.varID_to_sample] = conditional_func(self.varID_to_sample, self.samples)
+        self.varID_to_sample = (self.varID_to_sample + 1) % self.n_variables
+        return self.samples.copy()
+

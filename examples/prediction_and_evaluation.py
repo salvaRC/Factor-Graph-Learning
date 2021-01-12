@@ -80,8 +80,8 @@ def eval_final_predictions(Y, preds, probs=None, abstention=-1, only_on_labeled=
         if verbose:
             print("Changing -1 <-> 0 for computing probability scores")
         absts = Yc == 0
-        Yc[Yc == -1] = 0
-        Yc[absts] = -1
+        Yc[Yc == neg_label] = 0
+        Yc[absts] = neg_label
     auc = roc_auc_score(Yc, probsC)
     logloss = log_loss(Yc, probsC)
     brier = np.square(Yc - probsC).mean()
@@ -91,7 +91,7 @@ def eval_final_predictions(Y, preds, probs=None, abstention=-1, only_on_labeled=
     stats = {'accuracy': acc, "tp": tp, "tn": tn, "fp": fp, "fn": fn, 'recall': recall, 'precision': precision, 'f1': f1,
              "MSE": MSE, "MAE": MAE, 'auc': auc, 'logloss': logloss, 'brier': brier, 'coverage': coverage}
     if parent_stats is None:
-        stats = {f"{add_prefix}_{key}": value for key, value in stats.items()}
+        stats = {f"{add_prefix}_{key}".lstrip("_"): value for key, value in stats.items()}
     else:
         for key, value in stats.items():
             parent_stats[f"{add_prefix}_{key}"] = value

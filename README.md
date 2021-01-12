@@ -1,4 +1,4 @@
-## A Factor graph/MRF parameter learning package via stochastic maximum likelihood
+## A Factor graph/MRF parameter learning/estimation package via stochastic maximum likelihood
 The current implementation only supports binary variables, with values in e.g. {-1, +1} and uses some Numba to speed
  up the Numpy-based algorithms (by a little bit) -- there are certainly more potential speed-ups :) 
 
